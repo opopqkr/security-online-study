@@ -1,5 +1,6 @@
 # ✏**Spring Security 학습**
-정수원님의 인프런 강의 "스프링 시큐리티-Spring Boot 기반으로 개발하는 Spring Security"를 수강하면서 학습한 내용입니다. </br>
+정수원님의 인프런 강의 "스프링 시큐리티-Spring Boot 기반으로 개발하는 Spring Security"를
+수강하면서 학습한 내용입니다. </br>
 
 
 
