@@ -2,6 +2,7 @@ package io.security.basicsecurity;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
@@ -46,11 +47,10 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
      */
     @Override
     protected void configure(HttpSecurity http) throws Exception {
-        http
-                .authorizeRequests()
-                .anyRequest()
-                .authenticated(); // 인가
+        /* 인가(권한) API 관련 */
+        urlMatchConfig(http);
 
+        /* 인증 API 관련 */
         loginConfig(http);
         // logoutConfig(http);
         rememberMeConfig(http);
@@ -139,14 +139,22 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
 
     /**
      * <h4>session config</h4>
+     * <b>SessionManagementFilter</b><p>
+     * - 정책, 관리, 제어, 보호등의 기능을 함 <p>
+     * <p>
      * <p>
      * 세션 고정 보호 - 세션 고정 공격(로그인 시 발급 받은 세션 ID를 공격자가 세션 하이제킹 하여 공격) 방지. <p>
      * 인증 할 때마다 세션을 새로 생성하며, 설정하지 않아도 SpringSecurity에서 default로 설정함. <p>
      * <p>
      * <p>
      * 동시 세션 제어 - 동일한 계정의 최대 세션 허용 개수 초과 시 처리 <p>
-     * 1. 동일한 계정으로 인증 시 이전 세션 정보 만료 <p>
-     * 2. 동일한 계정으로 인증 시 인증 실패 처리 (로그인 차단) <p>
+     *
+     * <b>ConcurrentSessionFilter</b>와 연계 하여 사용. <p>
+     * - 매 요청 마다 현재 사용자의 세션 만료 여부 체크. <p>
+     * - 세션이 만료 되었을 경우 즉시 만료 처리. <p>
+     * <p>
+     * 1. 이전 세션 정보 만료 처리 <p>
+     * 2. 인증 실패 처리 (로그인 차단) <p>
      *
      * @param http - HttpSecurity.class : 보안 기능을 설정할 수 있는 API(인증 및 인가 API)를 제공
      * @throws Exception - exception
@@ -168,5 +176,56 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                 /* 동시 세션 제어 */
                 .maximumSessions(1) // 최대 세션 허용 갯수, -1은 무제한
                 .maxSessionsPreventsLogin(true); // true - 로그인 차단, false(default) - 이전 세션 정보 만료
+    }
+
+    /**
+     * <h4>url match config</h4>
+     * 인가(권한) API 관련 설정 - 구체적인 경로가 먼저 오고 그것 보다 큰 범위의 경로는 뒤에 오도록 해야 함. <p>
+     * <p>
+     * authenticated() - 인증된 사용자의 접근을 허용 <p>
+     * fullyAuthenticated() - 인증된 사용자의 접근을 허용, rememberMe 인증 제외 <p>
+     * permitAll() - 모든 접근 허용 <p>
+     * denyAll() - 접근 허용 하지 않음 <p>
+     * anonymous() - 익명 사용자만 접근 허용, 익명 사용자와 인증된 사용자의 모든 접근을 허용하기 위해서는 permitAll() <p>
+     * rememberMe() - rememberMe API를 통해 인증된 사용자의 접근을 허용 <p>
+     *
+     * @param http - HttpSecurity.class : 보안 기능을 설정할 수 있는 API(인증 및 인가 API)를 제공
+     * @throws Exception - exception
+     */
+    private void urlMatchConfig(HttpSecurity http) throws Exception {
+        http
+                .authorizeRequests()
+                .antMatchers("/user").hasRole("USER")
+                .antMatchers("/admin/pay").hasRole("ADMIN")
+                .antMatchers("/admin/**").access("hasRole('ADMIN') or hasRole('SYS')") // SpEL 표현식으로 접근 허용.
+                .anyRequest()
+                .authenticated();
+    }
+
+    /**
+     * memory 방식의 사용자 생성
+     *
+     * @param auth - AuthenticationManagerBuilder
+     * @throws Exception - exception
+     */
+    @Override
+    protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+        auth
+                .inMemoryAuthentication()
+                .withUser("user")
+                .password("{noop}test") // prefix에 password algorithm 작성 필요.
+                .roles("USER");
+
+        auth
+                .inMemoryAuthentication()
+                .withUser("sys")
+                .password("{noop}test") // prefix에 password algorithm 작성 필요.
+                .roles("USER", "SYS"); // 하위 권한의 자원에 접근하기 위해서는 접근하고자 하는 하위 권한 할당 필요.
+
+        auth
+                .inMemoryAuthentication()
+                .withUser("admin")
+                .password("{noop}test") // prefix에 password algorithm 작성 필요.
+                .roles("USER", "SYS", "ADMIN"); // 하위 권한의 자원에 접근하기 위해서는 접근하고자 하는 하위 권한 할당 필요.
     }
 }
