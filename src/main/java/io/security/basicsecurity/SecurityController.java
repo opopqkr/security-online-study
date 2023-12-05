@@ -12,8 +12,13 @@ public class SecurityController {
     }
 
     @GetMapping("/loginPage")
-    public String loginPage() {
-        return "loginPage";
+    public String login() {
+        return "This is not Spring Security's login page.";
+    }
+
+    @GetMapping("/denied")
+    public String denied() {
+        return "Access is denied.";
     }
 
     @GetMapping("/user")

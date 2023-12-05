@@ -2,18 +2,21 @@ package io.security.basicsecurity;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.web.authentication.AuthenticationFailureHandler;
+import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.logout.LogoutHandler;
 import org.springframework.security.web.authentication.logout.LogoutSuccessHandler;
+import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
+import org.springframework.security.web.savedrequest.RequestCache;
+import org.springframework.security.web.savedrequest.SavedRequest;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
@@ -40,6 +43,33 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
     private UserDetailsService userDetailsService;
 
     /**
+     * memory 방식의 사용자 생성
+     *
+     * @param auth - AuthenticationManagerBuilder
+     * @throws Exception - exception
+     */
+    @Override
+    protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+        auth
+                .inMemoryAuthentication()
+                .withUser("user")
+                .password("{noop}test") // prefix에 password algorithm 작성 필요.
+                .roles("USER");
+
+        auth
+                .inMemoryAuthentication()
+                .withUser("sys")
+                .password("{noop}test") // prefix에 password algorithm 작성 필요.
+                .roles("USER", "SYS"); // 하위 권한의 자원에 접근하기 위해서는 접근하고자 하는 하위 권한 할당 필요.
+
+        auth
+                .inMemoryAuthentication()
+                .withUser("admin")
+                .password("{noop}test") // prefix에 password algorithm 작성 필요.
+                .roles("USER", "SYS", "ADMIN"); // 하위 권한의 자원에 접근하기 위해서는 접근하고자 하는 하위 권한 할당 필요.
+    }
+
+    /**
      * <h4>SpringSecurity Config</h4>
      *
      * @param http - HttpSecurity.class : 보안 기능을 설정할 수 있는 API(인증 및 인가 API)를 제공
@@ -52,9 +82,37 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
 
         /* 인증 API 관련 */
         loginConfig(http);
-        // logoutConfig(http);
+        logoutConfig(http);
         rememberMeConfig(http);
         sessionConfig(http);
+
+        /* exception handler */
+        exceptionConfig(http);
+    }
+
+    /**
+     * <h4>url match config</h4>
+     * 인가(권한) API 관련 설정 - 구체적인 경로가 먼저 오고 그것 보다 큰 범위의 경로는 뒤에 오도록 해야 함. <p>
+     * <p>
+     * authenticated() - 인증된 사용자의 접근을 허용 <p>
+     * fullyAuthenticated() - 인증된 사용자의 접근을 허용, rememberMe 인증 제외 <p>
+     * permitAll() - 모든 접근 허용 <p>
+     * denyAll() - 접근 허용 하지 않음 <p>
+     * anonymous() - 익명 사용자만 접근 허용, 익명 사용자와 인증된 사용자의 모든 접근을 허용하기 위해서는 permitAll() <p>
+     * rememberMe() - rememberMe API를 통해 인증된 사용자의 접근을 허용 <p>
+     *
+     * @param http - HttpSecurity.class : 보안 기능을 설정할 수 있는 API(인증 및 인가 API)를 제공
+     * @throws Exception - exception
+     */
+    private void urlMatchConfig(HttpSecurity http) throws Exception {
+        http
+                .authorizeRequests()
+                .antMatchers("/loginPage").permitAll()
+                .antMatchers("/user").hasRole("USER")
+                .antMatchers("/admin/pay").hasRole("ADMIN")
+                .antMatchers("/admin/**").access("hasRole('ADMIN') or hasRole('SYS')") // SpEL 표현식으로 접근 허용.
+                .anyRequest()
+                .authenticated();
     }
 
     /**
@@ -66,28 +124,30 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
     private void loginConfig(HttpSecurity http) throws Exception {
         http
                 .formLogin()
-                // .loginPage("/loginPage") // 인증을 받지 않아도 접근 허용해야 함
-                .defaultSuccessUrl("/")
-                .failureUrl("/login")
+                // .loginPage("/loginPage") // 설정을 하게되면 스프링 시큐리티 로그인 페이지로 갈 수 없음.
+                // .defaultSuccessUrl("/")
+                // .failureUrl("/login")
                 .usernameParameter("userId") // 로그인 페이지가 없을 경우 스프링 시큐리티가 제공하는 로그인 폼에서 변경됨, 추후 새로운 로그인 페이지를 만들 경우 동일하게 설정해야 함
                 .passwordParameter("passWd") // 로그인
                 // 페이지가 없을 경우 스프링 시큐리티가 제공하는 로그인 폼에서 변경됨, 추후 새로운 로그인 페이지를 만들 경우 동일하게 설정해야 함
                 .loginProcessingUrl("/loginProcess") // 로그인 페이지가 없을 경우 스프링 시큐리티가 제공하는 로그인 폼에서 변경됨, 추후 새로운 로그인 페이지를 만들 경우 동일하게 설정해야 함
+                // .failureHandler(new AuthenticationFailureHandler() {
+                //     @Override
+                //     public void onAuthenticationFailure(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse, AuthenticationException e) throws IOException, ServletException {
+                //         System.out.println("exception : " + e.getMessage());
+                //         httpServletResponse.sendRedirect("/login");
+                //     }
+                // })
                 .successHandler(new AuthenticationSuccessHandler() {
                     @Override
                     public void onAuthenticationSuccess(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse, Authentication authentication) throws IOException, ServletException {
                         System.out.println("authentication : " + authentication.getName());
-                        httpServletResponse.sendRedirect("/");
+                        RequestCache requestCache = new HttpSessionRequestCache();
+                        SavedRequest savedRequest = requestCache.getRequest(httpServletRequest, httpServletResponse);
+                        httpServletResponse.sendRedirect(savedRequest.getRedirectUrl());
                     }
                 })
-                .failureHandler(new AuthenticationFailureHandler() {
-                    @Override
-                    public void onAuthenticationFailure(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse, AuthenticationException e) throws IOException, ServletException {
-                        System.out.println("exception : " + e.getMessage());
-                        httpServletResponse.sendRedirect("/login");
-                    }
-                })
-                .permitAll(); // 인증
+                .permitAll();
     }
 
     /**
@@ -100,7 +160,7 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
         http.
                 logout() // spring security logout은 post request가 default
                 .logoutUrl("/logout") // logout url, default : "/logout"
-                .logoutSuccessUrl("/")
+                // .logoutSuccessUrl("/")
                 .addLogoutHandler(new LogoutHandler() {
                     @Override
                     public void logout(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse, Authentication authentication) {
@@ -131,7 +191,7 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
     private void rememberMeConfig(HttpSecurity http) throws Exception {
         http
                 .rememberMe() // rememberMe 기능 작동
-                .rememberMeParameter("remember") // rememberMe Parameter Setting, default : remember-me
+                .rememberMeParameter("remember-me") // rememberMe Parameter Setting, default : remember-me
                 .tokenValiditySeconds(3600) // token 유효 기간, default : 14일
                 // .alwaysRemember(true) // rememberMe 기능이 활성화 되지 않아도 항상 실행
                 .userDetailsService(userDetailsService); // rememberMe 인증 시 user 계정을 조회하는 처리를 위한 클래스
@@ -179,53 +239,39 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
     }
 
     /**
-     * <h4>url match config</h4>
-     * 인가(권한) API 관련 설정 - 구체적인 경로가 먼저 오고 그것 보다 큰 범위의 경로는 뒤에 오도록 해야 함. <p>
+     * <h4>ExceptionHandling config</h4>
+     * <b>ExceptionTranslationFilter (인증 및 인가 관련 예외 처리)</b> <p>
+     * - FilterSecurityInterceptorFilter에서 예외가 발생하여 ExceptionTranslationFilter에 throw(SpringSecurity filter 마지막에 위치) <p>
      * <p>
-     * authenticated() - 인증된 사용자의 접근을 허용 <p>
-     * fullyAuthenticated() - 인증된 사용자의 접근을 허용, rememberMe 인증 제외 <p>
-     * permitAll() - 모든 접근 허용 <p>
-     * denyAll() - 접근 허용 하지 않음 <p>
-     * anonymous() - 익명 사용자만 접근 허용, 익명 사용자와 인증된 사용자의 모든 접근을 허용하기 위해서는 permitAll() <p>
-     * rememberMe() - rememberMe API를 통해 인증된 사용자의 접근을 허용 <p>
+     * <p>
+     * <b>AuthenticationException (인증 예외 처리)</b> <p>
+     * - AuthenticationEntryPoint call -> 로그인 페이지 이동 or 401 <p>
+     * <p>
+     * - RequestCache 사용자의 이전 요청정보를 세션에 저장하고 이를 꺼내오는 캐시 메커니즘
+     * (login success Handler의 AuthenticationSuccessHandler()로 control)<p>
+     * - SavedRequest.class -> RequestCache 구현체에서 request 정보를 가져와 사용자가 요청했던 request 파라미터 및 header value 저장 <p>
+     * <p>
+     * <b>AccessDeniedException (인가 예외 처리)</b> <p>
+     * - AccessDeniedHandler에서 예외처리하도록 제공 <p>
      *
      * @param http - HttpSecurity.class : 보안 기능을 설정할 수 있는 API(인증 및 인가 API)를 제공
      * @throws Exception - exception
      */
-    private void urlMatchConfig(HttpSecurity http) throws Exception {
+    private void exceptionConfig(HttpSecurity http) throws Exception {
         http
-                .authorizeRequests()
-                .antMatchers("/user").hasRole("USER")
-                .antMatchers("/admin/pay").hasRole("ADMIN")
-                .antMatchers("/admin/**").access("hasRole('ADMIN') or hasRole('SYS')") // SpEL 표현식으로 접근 허용.
-                .anyRequest()
-                .authenticated();
-    }
-
-    /**
-     * memory 방식의 사용자 생성
-     *
-     * @param auth - AuthenticationManagerBuilder
-     * @throws Exception - exception
-     */
-    @Override
-    protected void configure(AuthenticationManagerBuilder auth) throws Exception {
-        auth
-                .inMemoryAuthentication()
-                .withUser("user")
-                .password("{noop}test") // prefix에 password algorithm 작성 필요.
-                .roles("USER");
-
-        auth
-                .inMemoryAuthentication()
-                .withUser("sys")
-                .password("{noop}test") // prefix에 password algorithm 작성 필요.
-                .roles("USER", "SYS"); // 하위 권한의 자원에 접근하기 위해서는 접근하고자 하는 하위 권한 할당 필요.
-
-        auth
-                .inMemoryAuthentication()
-                .withUser("admin")
-                .password("{noop}test") // prefix에 password algorithm 작성 필요.
-                .roles("USER", "SYS", "ADMIN"); // 하위 권한의 자원에 접근하기 위해서는 접근하고자 하는 하위 권한 할당 필요.
+                .exceptionHandling()
+                // .authenticationEntryPoint(new AuthenticationEntryPoint() {
+                //     @Override
+                //     public void commence(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse, AuthenticationException e) throws IOException, ServletException {
+                //          System.out.println("AuthenticationEntryPoint commence.");
+                //          httpServletResponse.sendRedirect("/loginPage"); // spring security 로그인 페이지가 아닌 직접 구현한 페이지로 이동.
+                //      }
+                //  })
+                .accessDeniedHandler(new AccessDeniedHandler() {
+                    @Override
+                    public void handle(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse, AccessDeniedException e) throws IOException, ServletException {
+                        httpServletResponse.sendRedirect("/denied");
+                    }
+                });
     }
 }
