@@ -88,6 +88,9 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
 
         /* exception handler */
         exceptionConfig(http);
+
+        /* csrf filter*/
+        // csrfConfig(http);
     }
 
     /**
@@ -273,5 +276,21 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                         httpServletResponse.sendRedirect("/denied");
                     }
                 });
+    }
+
+    /**
+     * <h4>CSRF config</h4>
+     * <b>CSRF (사이트 간 요청 위조)</b> <p>
+     * <p>
+     * <b>CSRF Filter</b> <p>
+     * 1. 모든 요청에 랜덤하게 생성된 토큰을 Http parameter에 요구 <p>
+     * 2. 요청 시 전달되는 토큰 값과 서버에 저장된 실제 값과 비교 후 일치하지 않으면 요청 실패.<p>
+     *
+     * @param http - HttpSecurity.class : 보안 기능을 설정할 수 있는 API(인증 및 인가 API)를 제공
+     * @throws Exception - exception
+     */
+    private void csrfConfig(HttpSecurity http) throws Exception {
+        http.csrf(); // 소스를 작성하지 않아도 default로 활성화 되어 있음.
+        // http.csrf().disable(); // 비 활성화 - csrf filter 생성 X
     }
 }
