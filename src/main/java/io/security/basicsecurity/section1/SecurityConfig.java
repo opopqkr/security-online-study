@@ -1,4 +1,4 @@
-package io.security.basicsecurity;
+package io.security.basicsecurity.section1;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
